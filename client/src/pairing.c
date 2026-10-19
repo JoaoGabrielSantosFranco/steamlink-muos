@@ -186,7 +186,9 @@ static void on_lan_packet(pairing *p, const uint8_t *pkt, size_t len, const stru
         if (f.field == 3 && f.wire == 2) auth_key = f.data, akl = f.len;
         if (f.field == 4 && f.wire == 2) token = f.data, tl = f.len;
     }
-    LOG("pairing: AuthorizationResponse result=%d auth_key=%zu", result, akl);
+    LOG("pairing: AuthorizationResponse result=%d auth_key=%zu via %s", result, akl, from ? "lan" : "steam");
+    /* Anyone on the LAN can send UDP: only trust it when it carries the PC's PIN-bound key proof. */
+    if (from && (result != 0 || akl != 32)) return;
     if (result != 0) {
         fail(p->job, auth_result_text(result));
         p->done = true;
