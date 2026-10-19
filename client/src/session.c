@@ -34,6 +34,7 @@ enum {
 #define CONNECT_MAGIC 0x3C8F3DC7u /* CRC32C("Connect") */
 #define HEADER_SIZE 13
 #define MAX_FRAGS 2048
+#define MAX_MESSAGE (4u << 20) /* cap on any reassembled message or video frame */
 #define RTX_SLOTS 128
 #define WINDOW 256
 #define HID_DEVICE_ID 1
@@ -87,6 +88,7 @@ typedef struct {
     bool active;
     uint16_t base;
     int total, got;
+    size_t bytes;
     uint8_t **parts;
     size_t *lens;
 } assembly;
@@ -106,7 +108,7 @@ struct sl_session {
 
     uint8_t my_id, peer_id;
     uint16_t next_pid[CH_MAX][2];
-    uint64_t send_seq;
+    uint64_t send_seq, recv_seq;
     rtx_entry rtx[RTX_SLOTS];
     reliable_window *windows[CH_MAX];
     assembly assemblies[CH_MAX];
@@ -467,6 +469,11 @@ static void on_control(sl_session *s, const uint8_t *msg, size_t len) {
             LOG("control %d: decrypt failed", type);
             return;
         }
+        if (seq < s->recv_seq) { /* replayed or stale message */
+            LOG("control %d: dropping old sequence %llu", type, (unsigned long long) seq);
+            return;
+        }
+        s->recv_seq = seq + 1;
         body = plain;
         bl = (size_t) n;
     }
@@ -692,6 +699,13 @@ static void on_video_data(sl_session *s, const uint8_t *msg, size_t len) {
         s->frame.len = 0;
     }
     if (flags & VF_KEYFRAME) s->frame_key = true;
+    if (s->frame.len + dl * 3 / 2 + 8 > MAX_MESSAGE) {
+        s->frame_started = false;
+        s->waiting_key = true;
+        s->waiting_since = now;
+        request_keyframe(s);
+        return;
+    }
     append_escaped(&s->frame, data, dl, flags);
     if (flags & VF_FRAME_FINISH) {
         if (s->cb.video_frame) s->cb.video_frame(s->cb.ctx, s->frame.buf, s->frame.len, s->frame_key);
@@ -740,12 +754,18 @@ static void on_unreliable(sl_session *s, uint8_t type, int channel, uint16_t fra
         a->parts[0] = malloc(len ? len : 1);
         memcpy(a->parts[0], payload, len);
         a->lens[0] = len;
+        a->bytes = len;
         a->got = 1;
         return;
     }
     if (!a->active) return;
     int idx = (uint16_t) (pid - a->base);
     if (idx < 1 || idx > a->total || a->parts[idx]) return;
+    if (a->bytes + len > MAX_MESSAGE) {
+        assembly_reset(a);
+        return;
+    }
+    a->bytes += len;
     a->parts[idx] = malloc(len ? len : 1);
     memcpy(a->parts[idx], payload, len);
     a->lens[idx] = len;
