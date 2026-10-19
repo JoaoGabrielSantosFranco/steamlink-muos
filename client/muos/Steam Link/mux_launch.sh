@@ -28,6 +28,10 @@ OLD_GOV="$(cat "$GOV_FILE" 2>/dev/null)"
 # Wi-Fi power saving adds tens of ms of jitter to every packet.
 command -v iw >/dev/null 2>&1 && iw dev wlan0 set power_save off 2>/dev/null
 
+# Name shown in Steam's list of paired devices.
+SL_DEVICE_NAME="$(GET_VAR "device" "board/name" 2>/dev/null)"
+export SL_DEVICE_NAME="muOS ${SL_DEVICE_NAME:-handheld}"
+
 CAFFEINE="$(command -v CAFFEINE 2>/dev/null || true)"
 [ -n "$CAFFEINE" ] && "$CAFFEINE" on
 

@@ -2,7 +2,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pb.h"
 #include "util.h"
+
+/* LAN framing on UDP 27036: signature, u32 header length, header, u32 body length, body. */
+size_t lan_pack(const pbw *hdr, const pbw *body, uint8_t *pkt, size_t cap);
+/* Returns the header's msg_type and points body at the body, or -1 if the packet isn't framed. */
+int lan_unpack(const uint8_t *pkt, size_t len, const uint8_t **body, size_t *bodylen);
 
 typedef struct {
     char ip[64];

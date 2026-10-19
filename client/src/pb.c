@@ -44,6 +44,13 @@ void pb_int(pbw *w, int field, int64_t v) { pb_uint(w, field, (uint64_t) v); }
 
 void pb_bool(pbw *w, int field, bool v) { pb_uint(w, field, v ? 1 : 0); }
 
+void pb_fixed64(pbw *w, int field, uint64_t v) {
+    uint8_t b[8];
+    for (int i = 0; i < 8; i++) b[i] = (uint8_t) (v >> (8 * i));
+    tag(w, field, 1);
+    pbw_raw(w, b, 8);
+}
+
 void pb_bytes(pbw *w, int field, const void *data, size_t len) {
     tag(w, field, 2);
     varint(w, len);

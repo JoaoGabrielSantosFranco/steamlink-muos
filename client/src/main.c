@@ -14,6 +14,7 @@
 #include "discovery.h"
 #include "font.h"
 #include "media.h"
+#include "pairing.h"
 #include "session.h"
 #include "util.h"
 
@@ -275,26 +276,91 @@ static void read_pad(app_t *a, sl_gamepad *gp) {
     for (int ax = 0; ax < 6; ax++) gp->axes[ax] = SDL_GameControllerGetAxis(a->pad, (SDL_GameControllerAxis) ax);
 }
 
-/* Waits for A (retry, returns true) or B / quit (returns false). */
-static bool wait_choice(app_t *a) {
-    if (a->headless) return false;
+enum { CHOICE_QUIT, CHOICE_RETRY, CHOICE_PAIR };
+
+/* A = retry, Y = pair again, B = quit. */
+static int wait_choice(app_t *a) {
+    if (a->headless) return CHOICE_QUIT;
     for (;;) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             handle_device_event(a, &e);
-            if (e.type == SDL_QUIT) return false;
+            if (e.type == SDL_QUIT) return CHOICE_QUIT;
             if (e.type == SDL_CONTROLLERBUTTONDOWN) {
                 if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)
-                    return true;
+                    return CHOICE_RETRY;
+                if (e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) return CHOICE_PAIR;
                 if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
-                    return false;
+                    return CHOICE_QUIT;
             }
             if (e.type == SDL_KEYDOWN) {
-                if (e.key.keysym.sym == SDLK_RETURN) return true;
-                if (e.key.keysym.sym == SDLK_ESCAPE) return false;
+                if (e.key.keysym.sym == SDLK_RETURN) return CHOICE_RETRY;
+                if (e.key.keysym.sym == SDLK_ESCAPE) return CHOICE_QUIT;
             }
         }
         SDL_Delay(16);
+    }
+}
+
+/* ---------------------------------------------------------------- pairing */
+
+static void show_pin(app_t *a, const char *pin) {
+    if (a->headless) return;
+    int w, h;
+    SDL_GetRendererOutputSize(a->ren, &w, &h);
+    SDL_SetRenderDrawColor(a->ren, 23, 26, 33, 255);
+    SDL_RenderClear(a->ren);
+    SDL_SetRenderDrawColor(a->ren, 102, 192, 244, 255);
+    draw_wrapped(a->ren, w, h / 10, 3, "Parear com o PC");
+    int scale = w / 60 > 4 ? w / 60 : 4;
+    SDL_SetRenderDrawColor(a->ren, 255, 255, 255, 255);
+    draw_text(a->ren, (w - (int) strlen(pin) * 6 * scale) / 2, h / 10 + 50, scale, pin);
+    SDL_SetRenderDrawColor(a->ren, 220, 222, 223, 255);
+    draw_wrapped(a->ren, w, h / 10 + 70 + 8 * scale, 2,
+                 "No PC: Steam > Configuracoes > Remote Play > Parear Steam Link, e digite este PIN.");
+    SDL_SetRenderDrawColor(a->ren, 140, 150, 160, 255);
+    draw_wrapped(a->ren, w, h - 40, 2, "B: cancelar");
+    SDL_RenderPresent(a->ren);
+}
+
+/* Pairs this handheld through Steam and writes device.json; false if the user quit. */
+static bool run_pairing(app_t *a, const char *config_path, const char *dir) {
+    static char cafile[PATH_MAX + 16], name[64];
+    snprintf(cafile, sizeof(cafile), "%s/cacert.pem", dir);
+    const char *env = getenv("SL_DEVICE_NAME");
+    if (env && *env) snprintf(name, sizeof(name), "%s", env);
+    else if (gethostname(name, sizeof(name)) != 0 || !name[0]) snprintf(name, sizeof(name), "muOS");
+    for (char *c = name; *c; c++)
+        if (*c == '"' || *c == '\\' || (unsigned char) *c < 32) *c = '_';
+    for (;;) {
+        static pair_job job;
+        memset(&job, 0, sizeof(job));
+        job.config_path = config_path;
+        job.cafile = cafile;
+        job.device_name = name;
+        pthread_t t;
+        pthread_create(&t, NULL, pair_run, &job);
+        bool logged_pin = false;
+        while (atomic_load(&job.phase) != PAIR_DONE && atomic_load(&job.phase) != PAIR_FAILED) {
+            if (atomic_load(&job.phase) == PAIR_SHOW_PIN) {
+                if (!logged_pin) LOG("pairing PIN: %s (enter it on the PC)", job.pin);
+                logged_pin = true;
+                show_pin(a, job.pin);
+            } else {
+                show_screen(a, "Parear com o PC", job.message, "B: sair");
+            }
+            if (!a->headless && poll_quit(a)) job.cancel = 1;
+            SDL_Delay(50);
+        }
+        pthread_join(t, NULL);
+        if (atomic_load(&job.phase) == PAIR_DONE) {
+            show_screen(a, "Pareado!", "Este aparelho agora esta autorizado no Steam do PC.", NULL);
+            if (!a->headless) SDL_Delay(1500);
+            return true;
+        }
+        if (job.cancel) return false;
+        show_screen(a, "Pareamento falhou", job.message, "A: tentar de novo   B: sair");
+        if (wait_choice(a) != CHOICE_RETRY) return false;
     }
 }
 
@@ -535,16 +601,14 @@ int main(int argc, char **argv) {
         open_pads(a);
     }
 
-    if (!have_config) {
-        char msg[PATH_MAX + 128];
-        snprintf(msg, sizeof(msg), "Arquivo de pareamento nao encontrado: %s", config_path);
-        show_screen(a, "Steam Link", msg, "Pareie no PC (tools/proto/pair.py) e copie o device.json. B: sair");
-        wait_choice(a);
-        SDL_Quit();
-        return 1;
+    bool paired = have_config;
+    while (!paired) {
+        if (!run_pairing(a, config_path, dir)) break;
+        paired = config_load(&a->cfg, config_path);
+        if (host[0]) snprintf(a->cfg.host, sizeof(a->cfg.host), "%s", host);
     }
 
-    for (;;) {
+    while (paired) {
         sl_host hosts[8];
         int n = 0;
         if (a->cfg.host[0]) {
@@ -567,8 +631,15 @@ int main(int argc, char **argv) {
             break;
         }
         LOG("back to menu: %s", reason);
-        show_screen(a, "Steam Link", reason[0] ? reason : "Streaming encerrado", "A: tentar de novo   B: sair");
-        if (!wait_choice(a)) break;
+        show_screen(a, "Steam Link", reason[0] ? reason : "Streaming encerrado",
+                    "A: tentar de novo   Y: parear de novo   B: sair");
+        int choice = wait_choice(a);
+        if (choice == CHOICE_QUIT) break;
+        if (choice == CHOICE_PAIR) {
+            if (!run_pairing(a, config_path, dir)) break;
+            paired = config_load(&a->cfg, config_path);
+            if (host[0]) snprintf(a->cfg.host, sizeof(a->cfg.host), "%s", host);
+        }
     }
     if (a->pad) SDL_GameControllerClose(a->pad);
     if (a->audio) SDL_CloseAudioDevice(a->audio);

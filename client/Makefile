@@ -20,7 +20,8 @@ OUT := build/$(ARCH)
 CFLAGS := -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -D_REENTRANT -pthread \
           -I$(FF)/include -idirafter /usr/include/$(TRIPLET) -idirafter /usr/include
 LDFLAGS := -pthread -L$(LIBDIR) -Wl,-rpath-link,$(LIBDIR) -Wl,--as-needed
-LDLIBS := $(FF)/lib/libavcodec.a $(FF)/lib/libswresample.a $(FF)/lib/libavutil.a $(LIBDIR)/libcrypto.a -lSDL2 -lm -ldl
+LDLIBS := $(FF)/lib/libavcodec.a $(FF)/lib/libswresample.a $(FF)/lib/libavutil.a \
+          $(LIBDIR)/libssl.a $(LIBDIR)/libcrypto.a -lSDL2 -lm -ldl
 
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:src/%.c=$(OUT)/%.o)
@@ -46,6 +47,7 @@ package: build/aarch64/steamlink
 	mkdir -p "$(APPDIR)"
 	cp -r "muos/Steam Link/." "$(APPDIR)/"
 	cp build/aarch64/steamlink "$(APPDIR)/steamlink"
+	cp /etc/ssl/certs/ca-certificates.crt "$(APPDIR)/cacert.pem"
 	chmod +x "$(APPDIR)/steamlink" "$(APPDIR)/mux_launch.sh"
 	if [ -n "$(CREDENTIALS)" ]; then install -m 600 "$(CREDENTIALS)" "$(APPDIR)/device.json"; fi
 	cd dist && rm -f SteamLink-muOS.zip && python3 -m zipfile -c SteamLink-muOS.zip MUOS

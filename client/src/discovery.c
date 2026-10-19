@@ -40,10 +40,9 @@ static int open_socket(bool bind_lan_port) {
     return s;
 }
 
-static void send_framed(int s, const struct sockaddr_in *to, const pbw *hdr, const pbw *body) {
-    uint8_t pkt[2048];
+size_t lan_pack(const pbw *hdr, const pbw *body, uint8_t *pkt, size_t cap) {
     size_t n = 0;
-    if (8 + 4 + hdr->len + 4 + body->len > sizeof(pkt)) return;
+    if (8 + 4 + hdr->len + 4 + body->len > cap) return 0;
     memcpy(pkt, SIGNATURE, 8);
     n = 8;
     put_le32(pkt + n, (uint32_t) hdr->len);
@@ -54,11 +53,17 @@ static void send_framed(int s, const struct sockaddr_in *to, const pbw *hdr, con
     n += 4;
     memcpy(pkt + n, body->buf, body->len);
     n += body->len;
-    sendto(s, pkt, n, 0, (const struct sockaddr *) to, sizeof(*to));
+    return n;
 }
 
-/* Returns msg type and sets body/bodylen, or -1. */
-static int parse_framed(const uint8_t *pkt, size_t len, const uint8_t **body, size_t *bodylen) {
+static void send_framed(int s, const struct sockaddr_in *to, const pbw *hdr, const pbw *body) {
+    uint8_t pkt[2048];
+    size_t n = lan_pack(hdr, body, pkt, sizeof(pkt));
+    if (n) sendto(s, pkt, n, 0, (const struct sockaddr *) to, sizeof(*to));
+}
+
+#define parse_framed lan_unpack
+int lan_unpack(const uint8_t *pkt, size_t len, const uint8_t **body, size_t *bodylen) {
     if (len < 16 || memcmp(pkt, SIGNATURE, 8) != 0) return -1;
     uint32_t hl = get_le32(pkt + 8);
     if (12 + (size_t) hl + 4 > len) return -1;

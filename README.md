@@ -4,13 +4,14 @@ Cliente **Steam Link nativo** para portáteis com [muOS](https://muos.dev), feit
 **Anbernic RG40XXH**. Jogue os jogos do Steam do seu PC pela rede local usando o próprio
 protocolo do Steam Remote Play: no PC fica só o Steam, sem Sunshine, Moonlight ou outro servidor.
 
-> **Status: experimental.** O cliente já conecta, autentica, recebe vídeo (H.264, 60 fps) e áudio
-> (Opus) e o Steam reconhece os botões como um controle. Foi testado contra um Steam real
-> (Windows) a partir de um PC e do binário ARM64 em emulação; **ainda não foi validado no aparelho
-> físico**. Relatos e logs são bem-vindos.
+> **Status: experimental.** O streaming (vídeo H.264 60 fps, áudio Opus e controles) já rodou num
+> RG40XXH real. O pareamento direto no aparelho é novo e ainda está sendo validado. Relatos e logs
+> são bem-vindos.
 
 ## Recursos
 
+- **Tudo pelo aparelho:** na primeira vez o app mostra um PIN; você digita esse PIN no Steam do PC e
+  pronto. Não precisa de outro computador, script ou arquivo para copiar.
 - Encontra sozinho os PCs com Steam na rede (descoberta UDP 27036).
 - Streaming de vídeo H.264 até 60 fps, ajustado à tela (faixas pretas quando o formato não bate).
 - Áudio Opus 48 kHz estéreo, com baixa latência.
@@ -22,7 +23,7 @@ protocolo do Steam Remote Play: no PC fica só o Steam, sem Sunshine, Moonlight 
 
 | Aparelho | Situação |
 |---|---|
-| Anbernic RG40XXH | alvo do projeto (aguardando teste no aparelho) |
+| Anbernic RG40XXH | streaming testado no aparelho |
 | Outros com muOS e chip H700 (RG35XX Plus/H/SP/2024, RG40XX V, RG CubeXX, RG34XX, RG28XX) | devem funcionar, não testados |
 | Outros muOS ARM64 (TrimUI, Rockchip) | podem funcionar; desempenho do vídeo não avaliado |
 
@@ -34,46 +35,37 @@ num H700; aparelhos mais fracos podem engasgar.
 - **No PC:** Steam aberto, logado, com **Remote Play ativado** (Steam → Configurações → Remote Play),
   na mesma rede do portátil. O Windows precisa estar desbloqueado (o Steam não transmite a tela de
   bloqueio nem os avisos do UAC).
-- **No portátil:** muOS com Wi-Fi conectado.
-- **Para parear (uma vez):** um computador na mesma rede com Python 3 e [uv](https://docs.astral.sh/uv/)
-  (ou `pip install protobuf cryptography websockets`).
+- **No portátil:** muOS com Wi-Fi conectado. Na primeira vez também precisa de **internet**, porque o
+  PIN é gerado pelos servidores da Steam (depois disso o streaming é só pela rede local).
 
 ## Instalação
 
-### 1. Parear (uma vez)
+### 1. Copiar para o cartão SD
 
-O pareamento por PIN ainda não roda no portátil; ele é feito por um script no computador, que gera
-a identidade e a chave do dispositivo:
-
-```sh
-uv run --with protobuf --with cryptography --with websockets python -I tools/proto/pair.py
-```
-
-O script mostra um **PIN**. No PC, abra Steam → Configurações → Remote Play → **Parear Steam Link**
-e digite o PIN. Ao terminar, ele grava `state/device.json`.
-
-> `device.json` contém a chave do seu dispositivo. Não publique nem compartilhe esse arquivo.
-
-### 2. Copiar para o cartão SD
-
-Baixe `SteamLink-muOS.zip` na página de **Releases** (ou gere com `make package`, veja
-[Compilar](#compilar)) e extraia na **raiz** do cartão SD do muOS. Fica assim:
+Baixe `SteamLink-muOS.zip` na página de **Releases** e extraia na **raiz** do cartão SD do muOS.
+Fica assim:
 
 ```
 MUOS/application/Steam Link/
 ├── mux_launch.sh
 ├── mux_lang.ini
 ├── glyph/steamlink.png
-├── steamlink
-└── device.json      ← copie o seu aqui
+├── cacert.pem       (certificados para falar com a Steam com segurança)
+└── steamlink
 ```
 
-Copie o `state/device.json` gerado no passo 1 para dentro de `MUOS/application/Steam Link/`.
+### 2. Parear (só na primeira vez)
+
+No muOS, abra **Aplicativos → Steam Link**. O app mostra um **PIN** de 4 dígitos.
+No PC, abra Steam → Configurações → Remote Play → **Parear Steam Link** e digite o PIN.
+O app mostra "Pareado!" e grava a chave do aparelho em `device.json`, na própria pasta.
+
+> `device.json` é a chave do seu aparelho. Não compartilhe esse arquivo; apague-o para parear de novo.
 
 ### 3. Jogar
 
-No muOS: **Aplicativos → Steam Link**. O app procura o PC, conecta e abre o Big Picture.
-Na primeira conexão o Steam pode pedir confirmação no PC.
+Depois do pareamento o app já procura o PC, conecta e abre o Big Picture. Nas próximas vezes ele vai
+direto para o streaming.
 
 ## Controles
 
@@ -82,8 +74,8 @@ Na primeira conexão o Steam pode pedir confirmação no PC.
 | Controle no jogo | todos os botões, como um controle Xbox 360 |
 | Menu do Steam | MENU |
 | Sair durante o streaming | segurar **SELECT + START** por ~1 s |
-| Sair enquanto procura ou conecta ao PC | **B** (ou SELECT) |
-| Tentar de novo / sair (telas de erro) | A / B |
+| Sair enquanto pareia, procura ou conecta ao PC | **B** (ou SELECT) |
+| Telas de erro | **A** tenta de novo, **Y** pareia de novo, **B** sai |
 
 Se o muOS não fornecer o mapeamento do controle, o app aplica sozinho o layout padrão "muOS-Keys".
 
@@ -118,9 +110,11 @@ Os logs ficam em `MUOS/application/Steam Link/steamlink.log` e `steamlink.stderr
 
 | Sintoma | Causa provável |
 |---|---|
-| "Arquivo de pareamento não encontrado" | falta o `device.json` na pasta do app |
+| "Sem internet?" ou "Nenhum servidor da Steam respondeu" ao parear | o portátil precisa de internet para gerar o PIN |
+| "Certificado ... rejeitado" ao parear | falta o `cacert.pem` na pasta do app; extraia o zip de novo |
+| "Tempo esgotado" ao parear | o PIN não foi digitado no PC em 10 minutos; tente de novo |
 | "Nenhum PC encontrado" | Steam fechado, PC em outra rede ou firewall bloqueando o Steam; tente fixar `host` |
-| "Dispositivo não autorizado" | o pareamento foi removido no Steam; pareie de novo |
+| "Dispositivo não autorizado" | o pareamento foi removido no Steam; aperte **Y** para parear de novo |
 | Vídeo preto com aviso amarelo | o PC está na tela de bloqueio/UAC do Windows; desbloqueie |
 | Imagem travando | Wi-Fi fraco; reduza `bitrate_kbps` ou aproxime do roteador |
 | App fecha logo ao abrir | mande o `steamlink.stderr.log` numa issue |
@@ -175,7 +169,6 @@ docs/             documentação do protocolo
 
 ## Pendências
 
-- Pareamento por PIN direto no portátil.
 - Decodificação de vídeo por hardware (VPU do H700).
 - Pedir automaticamente a resolução da tela do aparelho.
 - Validação nos aparelhos listados acima.

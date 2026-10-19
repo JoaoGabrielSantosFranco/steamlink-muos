@@ -15,6 +15,7 @@ void pbw_raw(pbw *w, const void *data, size_t len);
 void pb_uint(pbw *w, int field, uint64_t v);
 void pb_int(pbw *w, int field, int64_t v);
 void pb_bool(pbw *w, int field, bool v);
+void pb_fixed64(pbw *w, int field, uint64_t v);
 void pb_bytes(pbw *w, int field, const void *data, size_t len);
 void pb_str(pbw *w, int field, const char *s);
 void pb_msg(pbw *w, int field, const pbw *sub);
