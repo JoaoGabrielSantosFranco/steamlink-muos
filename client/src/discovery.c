@@ -230,7 +230,7 @@ int request_stream(const sl_config *cfg, const char *ip, int *port, uint8_t *ses
         const uint8_t *b;
         size_t bl;
         int type = n > 0 ? parse_framed(buf, (size_t) n, &b, &bl) : -1;
-        if (type < 0 || from.sin_addr.s_addr != to.sin_addr.s_addr) continue;
+        if (type < 0 || from.sin_addr.s_addr != to.sin_addr.s_addr || from.sin_port != htons(LAN_PORT)) continue;
         pbr r = pbr_make(b, bl);
         pbf f;
         if (type == MSG_PROOF_REQUEST) {
@@ -241,7 +241,7 @@ int request_stream(const sl_config *cfg, const char *ip, int *port, uint8_t *ses
                 if (f.field == 1) challenge = f.data, cl = f.len;
                 if (f.field == 2) rid = f.v;
             }
-            if (!challenge || cl > 256) continue;
+            if (!challenge || cl > 256 || (rid && rid != request_id)) continue;
             uint8_t proof[512];
             size_t pl = sl_symmetric_encrypt(cfg->secret, cfg->secret_len, challenge, cl, proof);
             pbw resp;

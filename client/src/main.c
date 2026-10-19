@@ -31,6 +31,7 @@ typedef struct {
     long audio_frames;
     video_dec *video;
     sl_session *session;
+    pthread_mutex_t session_lock; /* the decode thread reads `session`; teardown clears it */
     SDL_GameController *pad;
     atomic_uint rumble_lo, rumble_hi, rumble_ms;
     atomic_bool rumble_pending;
@@ -100,7 +101,9 @@ static void show_screen(app_t *a, const char *title, const char *msg, const char
 
 static void cb_need_keyframe(void *ctx) {
     app_t *a = ctx;
+    pthread_mutex_lock(&a->session_lock);
     if (a->session) session_request_keyframe(a->session);
+    pthread_mutex_unlock(&a->session_lock);
 }
 
 static void cb_video_start(void *ctx, int codec, int w, int h) {
@@ -267,7 +270,10 @@ static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, 
         .ctx = a, .video_start = cb_video_start, .video_frame = cb_video_frame, .audio_start = cb_audio_start,
         .audio_frame = cb_audio_frame, .rumble = cb_rumble,
     };
-    a->session = session_start(&a->cfg, ip, port, key, keylen, &cb);
+    sl_session *s = session_start(&a->cfg, ip, port, key, keylen, &cb);
+    pthread_mutex_lock(&a->session_lock);
+    a->session = s;
+    pthread_mutex_unlock(&a->session_lock);
     show_screen(a, "Conectando", "Negociando streaming...", NULL);
 
     bool quit = false;
@@ -336,8 +342,11 @@ static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, 
         }
     }
     session_reason(a->session, reason, rlen);
-    session_stop(a->session);
+    pthread_mutex_lock(&a->session_lock);
+    sl_session *ending = a->session;
     a->session = NULL;
+    pthread_mutex_unlock(&a->session_lock);
+    session_stop(ending); /* joins the network thread, so no more frames reach the decoder */
     video_dec_destroy(a->video);
     a->video = NULL;
     pthread_mutex_lock(&a->audio_lock);
@@ -385,6 +394,7 @@ int main(int argc, char **argv) {
     log_open(log_path);
     av_log_set_level(AV_LOG_ERROR);
     pthread_mutex_init(&a->audio_lock, NULL);
+    pthread_mutex_init(&a->session_lock, NULL);
     bool have_config = config_load(&a->cfg, config_path);
     if (host[0]) snprintf(a->cfg.host, sizeof(a->cfg.host), "%s", host);
     LOG("steamlink start: config=%s ok=%d host=%s %dx%d@%d", config_path, have_config,
