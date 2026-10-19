@@ -81,8 +81,11 @@ Na primeira conexão o Steam pode pedir confirmação no PC.
 |---|---|
 | Controle no jogo | todos os botões, como um controle Xbox 360 |
 | Menu do Steam | MENU |
-| Sair do streaming | segurar **SELECT + START** por ~1 s |
+| Sair durante o streaming | segurar **SELECT + START** por ~1 s |
+| Sair enquanto procura ou conecta ao PC | **B** (ou SELECT) |
 | Tentar de novo / sair (telas de erro) | A / B |
+
+Se o muOS não fornecer o mapeamento do controle, o app aplica sozinho o layout padrão "muOS-Keys".
 
 O mapeamento dos botões vem do próprio muOS (configuração de layout "retro"/"modern").
 

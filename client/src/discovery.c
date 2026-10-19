@@ -90,7 +90,7 @@ static void broadcast_targets(int s, const pbw *hdr, const pbw *body) {
     freeifaddrs(ifs);
 }
 
-int discover_hosts(uint64_t client_id, sl_host *hosts, int max, int timeout_ms) {
+int discover_hosts(uint64_t client_id, sl_host *hosts, int max, int timeout_ms, const volatile int *cancel) {
     int s = open_socket(false);
     if (s < 0) return 0;
     pbw hdr, body;
@@ -101,7 +101,7 @@ int discover_hosts(uint64_t client_id, sl_host *hosts, int max, int timeout_ms) 
     pb_uint(&body, 1, 1);
     int found = 0;
     uint64_t end = now_ms() + (uint64_t) timeout_ms, next_send = 0;
-    while (now_ms() < end && found < max) {
+    while (now_ms() < end && found < max && !(cancel && *cancel)) {
         if (now_ms() >= next_send) {
             broadcast_targets(s, &hdr, &body);
             next_send = now_ms() + 1000;
@@ -166,7 +166,7 @@ static const char *streaming_result_text(int r) {
 }
 
 int request_stream(const sl_config *cfg, const char *ip, int *port, uint8_t *session_key, size_t *keylen,
-                   char *err, size_t errlen) {
+                   char *err, size_t errlen, const volatile int *cancel) {
     int s = open_socket(true);
     if (s < 0) {
         snprintf(err, errlen, "socket: %s", strerror(errno));
@@ -213,6 +213,10 @@ int request_stream(const sl_config *cfg, const char *ip, int *port, uint8_t *ses
     snprintf(err, errlen, "PC nao respondeu ao pedido de streaming");
     uint64_t end = now_ms() + 30000, resend = now_ms() + 5000;
     while (now_ms() < end) {
+        if (cancel && *cancel) {
+            snprintf(err, errlen, "Cancelado");
+            break;
+        }
         struct pollfd p = {.fd = s, .events = POLLIN};
         if (poll(&p, 1, 200) <= 0) {
             if (now_ms() > resend) {

@@ -157,14 +157,114 @@ static void cb_rumble(void *ctx, uint16_t lo, uint16_t hi, uint32_t ms) {
 
 /* ---------------------------------------------------------------- input */
 
+/* If muOS didn't export a mapping for the built-in pad, fall back to its stock "muOS-Keys" layout so the
+ * buttons (and the exit chord) still work. */
+static void ensure_mapping(int index) {
+    if (SDL_IsGameController(index)) return;
+    char guid[64], name[64];
+    SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(index), guid, sizeof(guid));
+    snprintf(name, sizeof(name), "%s", SDL_JoystickNameForIndex(index) ? SDL_JoystickNameForIndex(index) : "pad");
+    for (char *c = name; *c; c++)
+        if (*c == ',') *c = ' ';
+    char map[512];
+    snprintf(map, sizeof(map),
+             "%s,%s,a:b3,b:b2,x:b5,y:b4,leftshoulder:b6,rightshoulder:b7,lefttrigger:b8,righttrigger:b9,guide:b12,"
+             "start:b11,back:b10,dpup:h0.1,dpleft:h0.8,dpright:h0.2,dpdown:h0.4,leftx:a0,lefty:a1,rightx:a2,"
+             "righty:a3,leftstick:b13,rightstick:b14,",
+             guid, name);
+    LOG("joystick %d has no mapping, applying muOS-Keys layout: %d", index, SDL_GameControllerAddMapping(map));
+}
+
+static void try_open_pad(app_t *a, int index) {
+    if (a->pad) return;
+    char guid[64];
+    SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(index), guid, sizeof(guid));
+    LOG("joystick %d: '%s' guid=%s gamecontroller=%d", index, SDL_JoystickNameForIndex(index), guid,
+        SDL_IsGameController(index));
+    ensure_mapping(index);
+    if (SDL_IsGameController(index)) a->pad = SDL_GameControllerOpen(index);
+    if (a->pad) LOG("using controller '%s'", SDL_GameControllerName(a->pad));
+}
+
 static void open_pads(app_t *a) {
-    for (int i = 0; i < SDL_NumJoysticks(); i++) {
-        char guid[64];
-        SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), guid, sizeof(guid));
-        LOG("joystick %d: '%s' guid=%s gamecontroller=%d", i, SDL_JoystickNameForIndex(i), guid,
-            SDL_IsGameController(i));
-        if (!a->pad && SDL_IsGameController(i)) a->pad = SDL_GameControllerOpen(i);
+    for (int i = 0; i < SDL_NumJoysticks(); i++) try_open_pad(a, i);
+}
+
+/* Shared hot-plug handling for every event loop. */
+static void handle_device_event(app_t *a, const SDL_Event *e) {
+    if (e->type == SDL_JOYDEVICEADDED) try_open_pad(a, e->jdevice.which);
+    if (e->type == SDL_CONTROLLERDEVICEREMOVED && a->pad &&
+        e->cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(a->pad))) {
+        SDL_GameControllerClose(a->pad);
+        a->pad = NULL;
     }
+}
+
+/* Pumps events on the status screens; true if the user pressed B / SELECT / Esc or the system asked to quit. */
+static bool poll_quit(app_t *a) {
+    bool quit = false;
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        handle_device_event(a, &e);
+        if (e.type == SDL_QUIT) quit = true;
+        if (e.type == SDL_CONTROLLERBUTTONDOWN &&
+            (e.cbutton.button == SDL_CONTROLLER_BUTTON_B || e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK))
+            quit = true;
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) quit = true;
+    }
+    return quit;
+}
+
+/* ---------------------------------------------------------------- background connect */
+
+typedef struct {
+    app_t *a;
+    bool discover;
+    volatile int cancel;
+    atomic_bool done;
+    sl_host hosts[8];
+    int n;
+    const char *ip;
+    int port, rc;
+    uint8_t key[32];
+    size_t keylen;
+    char reason[200];
+} connect_job;
+
+static void *connect_thread(void *arg) {
+    connect_job *j = arg;
+    if (j->discover)
+        j->n = discover_hosts(j->a->cfg.device_id, j->hosts, 8, 2500, &j->cancel);
+    else
+        j->rc = request_stream(&j->a->cfg, j->ip, &j->port, j->key, &j->keylen, j->reason, sizeof(j->reason),
+                               &j->cancel);
+    atomic_store(&j->done, true);
+    return NULL;
+}
+
+static void show_screen(app_t *a, const char *title, const char *msg, const char *hint);
+
+/* Runs a blocking network step off the UI thread so B still works. False if the user asked to quit. */
+static bool run_job(app_t *a, connect_job *j, const char *title, const char *msg) {
+    pthread_t t;
+    pthread_create(&t, NULL, connect_thread, j);
+    bool quit = false;
+    uint64_t next_draw = 0;
+    while (!atomic_load(&j->done)) {
+        if (!a->headless) {
+            if (now_ms() >= next_draw) {
+                show_screen(a, title, msg, "B: sair");
+                next_draw = now_ms() + 250;
+            }
+            if (poll_quit(a)) {
+                quit = true;
+                j->cancel = 1;
+            }
+        }
+        SDL_Delay(20);
+    }
+    pthread_join(t, NULL);
+    return !quit;
 }
 
 static void read_pad(app_t *a, sl_gamepad *gp) {
@@ -181,8 +281,8 @@ static bool wait_choice(app_t *a) {
     for (;;) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            handle_device_event(a, &e);
             if (e.type == SDL_QUIT) return false;
-            if (e.type == SDL_CONTROLLERDEVICEADDED && !a->pad) a->pad = SDL_GameControllerOpen(e.cdevice.which);
             if (e.type == SDL_CONTROLLERBUTTONDOWN) {
                 if (e.cbutton.button == SDL_CONTROLLER_BUTTON_A || e.cbutton.button == SDL_CONTROLLER_BUTTON_START)
                     return true;
@@ -258,12 +358,20 @@ static void present_frame(app_t *a, AVFrame *f, bool show_hint, bool secure_desk
 /* Returns true if the user asked to quit the app, false to go back to the retry screen. */
 static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, char *reason, size_t rlen) {
     char msg[200];
-    snprintf(msg, sizeof(msg), "%s (%s)", name, ip);
-    show_screen(a, "Conectando", msg, "O Steam no PC pode pedir confirmacao");
-    int port;
+    snprintf(msg, sizeof(msg), "%s (%s). O Steam no PC pode pedir confirmacao.", name, ip);
+    static connect_job job;
+    memset(&job, 0, sizeof(job));
+    job.a = a;
+    job.ip = ip;
+    if (!run_job(a, &job, "Conectando", msg)) return true;
+    if (job.rc != 0) {
+        snprintf(reason, rlen, "%s", job.reason);
+        return false;
+    }
+    int port = job.port;
+    size_t keylen = job.keylen;
     uint8_t key[32];
-    size_t keylen;
-    if (request_stream(&a->cfg, ip, &port, key, &keylen, reason, rlen) != 0) return false;
+    memcpy(key, job.key, sizeof(key));
 
     a->video = video_dec_create(cb_need_keyframe, a);
     sl_callbacks cb = {
@@ -274,7 +382,7 @@ static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, 
     pthread_mutex_lock(&a->session_lock);
     a->session = s;
     pthread_mutex_unlock(&a->session_lock);
-    show_screen(a, "Conectando", "Negociando streaming...", NULL);
+    show_screen(a, "Conectando", "Negociando streaming...", "B: sair");
 
     bool quit = false;
     uint64_t start = now_ms(), combo_since = 0, first_frame = 0, next_stats = now_ms() + 2000;
@@ -286,16 +394,12 @@ static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, 
         if (!a->headless) {
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
+                handle_device_event(a, &e);
                 if (e.type == SDL_QUIT) quit = true;
-                if (e.type == SDL_CONTROLLERDEVICEADDED && !a->pad) {
-                    a->pad = SDL_GameControllerOpen(e.cdevice.which);
-                    LOG("controller added: %s", a->pad ? SDL_GameControllerName(a->pad) : "?");
-                }
-                if (e.type == SDL_CONTROLLERDEVICEREMOVED && a->pad &&
-                    e.cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(a->pad))) {
-                    SDL_GameControllerClose(a->pad);
-                    a->pad = NULL;
-                }
+                if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) quit = true;
+                /* Before any video shows, B leaves; once streaming, B belongs to the game. */
+                if (!first_frame && e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B)
+                    quit = true;
             }
             if (quit) break;
             sl_gamepad gp;
@@ -330,7 +434,7 @@ static bool run_stream(app_t *a, const char *ip, const char *name, int seconds, 
             av_frame_free(&f);
         } else {
             if (!first_frame && !a->headless && session_phase(a->session) == SL_PHASE_STREAMING)
-                show_screen(a, "Conectando", "Aguardando video do PC...", NULL);
+                show_screen(a, "Conectando", "Aguardando video do PC...", "B: sair");
             SDL_Delay(2);
         }
         if (now_ms() >= next_stats) {
@@ -448,8 +552,13 @@ int main(int argc, char **argv) {
             snprintf(hosts[0].hostname, sizeof(hosts[0].hostname), "%s", a->cfg.host);
             n = 1;
         } else {
-            show_screen(a, "Steam Link", "Procurando PC com Steam na rede...", NULL);
-            n = discover_hosts(a->cfg.device_id, hosts, 8, 2500);
+            static connect_job job;
+            memset(&job, 0, sizeof(job));
+            job.a = a;
+            job.discover = true;
+            if (!run_job(a, &job, "Steam Link", "Procurando PC com Steam na rede...")) break;
+            n = job.n;
+            memcpy(hosts, job.hosts, sizeof(hosts));
         }
         char reason[200] = "";
         if (n == 0) {
