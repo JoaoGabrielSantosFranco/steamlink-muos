@@ -1,0 +1,18 @@
+# Pairing secret: never commit
+state/
+device.json
+
+# Valve binaries, installers and reverse-engineering dumps (not redistributable)
+SteamLink/
+re/*
+!re/protos/
+!re/pb/
+!re/keys/
+
+# Reference clones and build output
+.cache/
+client/build/
+client/dist/
+__pycache__/
+*.pyc
+*.log
