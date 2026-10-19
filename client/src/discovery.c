@@ -241,7 +241,7 @@ int request_stream(const sl_config *cfg, const char *ip, int *port, uint8_t *ses
                 if (f.field == 1) challenge = f.data, cl = f.len;
                 if (f.field == 2) rid = f.v;
             }
-            if (!challenge || cl > 256 || (rid && rid != request_id)) continue;
+            if (!challenge || cl > 256 || rid != request_id) continue;
             uint8_t proof[512];
             size_t pl = sl_symmetric_encrypt(cfg->secret, cfg->secret_len, challenge, cl, proof);
             pbw resp;
