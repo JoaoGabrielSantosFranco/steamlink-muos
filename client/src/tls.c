@@ -10,6 +10,7 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <openssl/err.h>
@@ -18,6 +19,7 @@
 #include <openssl/x509v3.h>
 
 #include "slcrypto.h"
+#include "util.h"
 
 struct tls_conn {
     int fd;
@@ -69,8 +71,12 @@ tls_conn *tls_connect(const char *host, int port, const char *cafile, char *err,
         if (access(SYSTEM_CA_FILES[i], R_OK) == 0 && SSL_CTX_load_verify_locations(c->ctx, SYSTEM_CA_FILES[i], NULL))
             loaded = true;
     SSL_CTX_set_default_verify_paths(c->ctx);
-    /* Handhelds often boot with a wrong clock: keep chain + hostname checks, skip validity dates. */
-    X509_VERIFY_PARAM_set_flags(SSL_CTX_get0_param(c->ctx), X509_V_FLAG_NO_CHECK_TIME);
+    /* Handhelds without an RTC often boot in 1970: only then skip validity dates (chain + hostname still
+     * checked). With a sane clock certificates are fully validated. */
+    if (time(NULL) < 1767225600) { /* 2026-01-01 */
+        LOG("tls: system clock looks unset, not checking certificate dates");
+        X509_VERIFY_PARAM_set_flags(SSL_CTX_get0_param(c->ctx), X509_V_FLAG_NO_CHECK_TIME);
+    }
     c->ssl = SSL_new(c->ctx);
     SSL_set_fd(c->ssl, fd);
     SSL_set_tlsext_host_name(c->ssl, host);
@@ -202,7 +208,8 @@ char *https_get(const char *url, const char *cafile, size_t *out_len, char *err,
             char *eol = memmem(body + r, len - r, "\r\n", 2);
             if (!eol || sz == 0) break;
             r = (size_t) (eol - body) + 2;
-            if (r + sz > len) sz = len - r;
+            if (r > len) break;
+            if (sz > len - r) sz = len - r;
             memmove(body + w, body + r, sz);
             w += sz;
             r += sz + 2;
