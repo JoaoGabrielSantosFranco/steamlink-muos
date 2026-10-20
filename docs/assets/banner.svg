@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-labelledby="t d">
+  <title id="t">Steam Link for muOS</title>
+  <desc id="d">Native Steam Link client for muOS handhelds</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#1b2838"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#66c0f4"/>
+      <stop offset="1" stop-color="#2a75bb"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.04"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="400" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="400" rx="24" fill="url(#grid)"/>
+
+  <!-- PC -->
+  <g transform="translate(110 110)">
+    <rect width="230" height="150" rx="10" fill="#0e1726" stroke="#66c0f4" stroke-opacity="0.6" stroke-width="3"/>
+    <rect x="14" y="14" width="202" height="122" rx="4" fill="url(#accent)" opacity="0.25"/>
+    <path d="M95 54l48 21-48 21z" fill="#c7d5e0"/>
+    <rect x="95" y="150" width="40" height="22" fill="#26354a"/>
+    <rect x="60" y="172" width="110" height="8" rx="4" fill="#26354a"/>
+  </g>
+
+  <!-- stream -->
+  <g fill="none" stroke="#66c0f4" stroke-width="5" stroke-linecap="round" stroke-dasharray="2 14">
+    <path d="M370 170 C 430 140, 470 140, 520 170"/>
+    <path d="M370 200 C 430 230, 470 230, 520 200"/>
+  </g>
+
+  <!-- handheld -->
+  <g transform="translate(540 105)">
+    <rect width="250" height="170" rx="26" fill="#d9dee5"/>
+    <rect x="62" y="18" width="126" height="96" rx="6" fill="#0e1726"/>
+    <rect x="70" y="26" width="110" height="80" rx="3" fill="url(#accent)" opacity="0.55"/>
+    <path d="M114 52l26 14-26 14z" fill="#ffffff"/>
+    <path d="M24 70h28M38 56v28" stroke="#3a4656" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="214" cy="58" r="8" fill="#3a4656"/>
+    <circle cx="214" cy="86" r="8" fill="#3a4656"/>
+    <circle cx="200" cy="72" r="8" fill="#3a4656"/>
+    <circle cx="228" cy="72" r="8" fill="#3a4656"/>
+    <rect x="100" y="132" width="20" height="7" rx="3.5" fill="#3a4656"/>
+    <rect x="130" y="132" width="20" height="7" rx="3.5" fill="#3a4656"/>
+  </g>
+
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+    <text x="840" y="180" font-size="54" font-weight="700" fill="#ffffff">Steam Link</text>
+    <text x="840" y="232" font-size="40" font-weight="300" fill="#66c0f4">for muOS</text>
+    <text x="842" y="276" font-size="19" fill="#8fa3b8">Native Remote Play client · no PC server</text>
+  </g>
+</svg>

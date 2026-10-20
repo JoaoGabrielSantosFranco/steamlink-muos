@@ -1,98 +1,180 @@
-# Steam Link para muOS
+<div align="center">
 
-Cliente **Steam Link nativo** para portáteis com [muOS](https://muos.dev), feito para o
-**Anbernic RG40XXH**. Jogue os jogos do Steam do seu PC pela rede local usando o próprio
-protocolo do Steam Remote Play: no PC fica só o Steam, sem Sunshine, Moonlight ou outro servidor.
+<img src="docs/assets/banner.svg" alt="Steam Link for muOS - native Remote Play client for muOS handhelds" width="100%">
 
-> **Status: experimental.** O streaming (vídeo H.264 60 fps, áudio Opus e controles) já rodou num
-> RG40XXH real. O pareamento direto no aparelho é novo e ainda está sendo validado. Relatos e logs
-> são bem-vindos.
+<br>
 
-## Recursos
+**Language:** **English** | [Português (Brasil)](README.pt-BR.md)
 
-- **Tudo pelo aparelho:** na primeira vez o app mostra um PIN; você digita esse PIN no Steam do PC e
-  pronto. Não precisa de outro computador, script ou arquivo para copiar.
-- Encontra sozinho os PCs com Steam na rede (descoberta UDP 27036).
-- Streaming de vídeo H.264 até 60 fps, ajustado à tela (faixas pretas quando o formato não bate).
-- Áudio Opus 48 kHz estéreo, com baixa latência.
-- Botões do aparelho viram um **controle Xbox 360** no PC (HID remoto do Steam). MENU = botão Steam.
-- Avisos na tela: PC não encontrado, PC recusou, PC na tela de bloqueio do Windows, conexão perdida.
-- Um único binário ARM64; depende só da SDL2 do muOS e de glibc ≥ 2.29.
+<br>
 
-## Aparelhos
+[![Release](https://img.shields.io/github/v/release/JoaoGabrielSantosFranco/steamlink-muos?include_prereleases&style=flat-square&label=release)](https://github.com/JoaoGabrielSantosFranco/steamlink-muos/releases)
+[![Downloads](https://img.shields.io/github/downloads/JoaoGabrielSantosFranco/steamlink-muos/total?style=flat-square)](https://github.com/JoaoGabrielSantosFranco/steamlink-muos/releases)
+[![Stars](https://img.shields.io/github/stars/JoaoGabrielSantosFranco/steamlink-muos?style=flat-square)](https://github.com/JoaoGabrielSantosFranco/steamlink-muos/stargazers)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-| Aparelho | Situação |
+![muOS](https://img.shields.io/badge/muOS-aarch64-2a75bb?style=flat-square)
+![C](https://img.shields.io/badge/C-gnu11-A8B9CC?style=flat-square&logo=c&logoColor=white)
+![SDL2](https://img.shields.io/badge/SDL2-video%20%26%20input-1B5E20?style=flat-square)
+![FFmpeg](https://img.shields.io/badge/FFmpeg-H.264%20%7C%20Opus-007808?style=flat-square&logo=ffmpeg&logoColor=white)
+![OpenSSL](https://img.shields.io/badge/OpenSSL-1.1.1-721412?style=flat-square&logo=openssl&logoColor=white)
+![Steam](https://img.shields.io/badge/Steam-Remote%20Play-171a21?style=flat-square&logo=steam&logoColor=white)
+
+</div>
+
+> [!WARNING]
+> **Experimental.** Streaming (H.264 at 60 fps, Opus audio and controls) has been tested on a real
+> RG40XXH. On-device pairing is new and still being validated. Reports and logs are very welcome.
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="33%">
+<a href="https://github.com/JoaoGabrielSantosFranco/steamlink-muos/releases/latest"><b>Download</b></a><br>
+<sub>Latest <code>SteamLink-muOS.zip</code></sub>
+</td>
+<td align="center" width="33%">
+<a href="#install"><b>Install</b></a><br>
+<sub>Unzip, open, type a PIN</sub>
+</td>
+<td align="center" width="33%">
+<a href="docs/PROTOCOLO.md"><b>Protocol notes</b></a><br>
+<sub>How Remote Play works on the wire</sub>
+</td>
+</tr>
+</table>
+
+[Jump to install ↓](#install)
+
+</div>
+
+---
+
+# Steam Link for muOS
+
+**Play your PC's Steam library on a muOS handheld, using nothing but Steam on the PC.**
+
+A native Steam Link client written in C, built by reverse engineering Steam's own Remote Play protocol.
+No Sunshine, no Moonlight, no companion app, and no PC needed to set it up.
+
+```
+unzip -> open the app -> type the PIN into Steam -> play
+```
+
+> The handheld becomes just another Steam Link. Steam does the rest.
+
+| | |
 |---|---|
-| Anbernic RG40XXH | streaming testado no aparelho |
-| Outros com muOS e chip H700 (RG35XX Plus/H/SP/2024, RG40XX V, RG CubeXX, RG34XX, RG28XX) | devem funcionar, não testados |
-| Outros muOS ARM64 (TrimUI, Rockchip) | podem funcionar; desempenho do vídeo não avaliado |
+| **Target device** | Anbernic RG40XXH (other H700 muOS devices expected to work) |
+| **Video** | H.264, up to 60 fps, letterboxed to the screen |
+| **Audio** | Opus, 48 kHz stereo, low latency |
+| **Input** | Seen by the PC as an Xbox 360 controller |
+| **Pairing** | On the device, with a 4-digit PIN |
+| **Footprint** | One ~4.7 MB ARM64 binary; needs only muOS's SDL2 and glibc ≥ 2.29 |
 
-O vídeo é decodificado pelo processador (FFmpeg). Em 640x360/640x480 a 60 fps isso cabe folgado
-num H700; aparelhos mais fracos podem engasgar.
+## Screenshots
 
-## Requisitos
+<div align="center">
 
-- **No PC:** Steam aberto, logado, com **Remote Play ativado** (Steam → Configurações → Remote Play),
-  na mesma rede do portátil. O Windows precisa estar desbloqueado (o Steam não transmite a tela de
-  bloqueio nem os avisos do UAC).
-- **No portátil:** muOS com Wi-Fi conectado. Na primeira vez também precisa de **internet**, porque o
-  PIN é gerado pelos servidores da Steam (depois disso o streaming é só pela rede local).
+<img src="docs/assets/screenshots/overview.png" alt="Steam Link for muOS screens: pairing PIN, searching for the PC, connecting to Steam, PC not found" width="100%">
 
-## Instalação
+<sub>Real app screens at the RG40XXH's 640×480: pairing PIN, PC search, connecting to Steam, and an error
+screen with its button hints. The PIN shown is an example.</sub>
 
-### 1. Copiar para o cartão SD
+</div>
 
-Baixe `SteamLink-muOS.zip` na página de **Releases** e extraia na **raiz** do cartão SD do muOS.
-Fica assim:
+## Why this exists
+
+| | Moonlight + Sunshine | **Steam Link for muOS** |
+|---|---|---|
+| Software on the PC | Sunshine, installed and configured | **Steam only** |
+| Pairing | PIN in Sunshine's web UI on the PC | **PIN typed into Steam** |
+| Where you land | Apps configured in Sunshine | **Steam Big Picture** |
+| Hardware decoding | Depends on the port | Not yet (CPU decode) |
+
+If you already live in Steam and just want your handheld to show up as a Steam Link, this is for you.
+
+---
+
+<a id="install"></a>
+
+## Install
+
+### Requirements
+
+| Where | What you need |
+|---|---|
+| **PC** | Steam running and signed in, with **Remote Play enabled** (*Steam → Settings → Remote Play*). Same local network as the handheld. Windows unlocked (Steam doesn't stream the lock screen or UAC prompts). |
+| **Handheld** | muOS with Wi-Fi connected. **Internet is needed for the first pairing only**, since the PIN comes from Steam's servers. Streaming itself stays on your LAN. |
+
+### 1. Copy the app to the SD card
+
+Download `SteamLink-muOS.zip` from [**Releases**](https://github.com/JoaoGabrielSantosFranco/steamlink-muos/releases/latest)
+and extract it to the **root** of the muOS SD card:
 
 ```
 MUOS/application/Steam Link/
-├── mux_launch.sh
+├── mux_launch.sh        muOS launcher
 ├── mux_lang.ini
 ├── glyph/steamlink.png
-├── cacert.pem       (certificados para falar com a Steam com segurança)
-└── steamlink
+├── cacert.pem           CA bundle for talking to Steam securely
+└── steamlink            the client
 ```
 
-### 2. Parear (só na primeira vez)
+### 2. Pair (first launch only)
 
-No muOS, abra **Aplicativos → Steam Link**. O app mostra um **PIN** de 4 dígitos.
-No PC, abra Steam → Configurações → Remote Play → **Parear Steam Link** e digite o PIN.
-O app mostra "Pareado!" e grava a chave do aparelho em `device.json`, na própria pasta.
+1. On the handheld, open **Applications → Steam Link**. A 4-digit **PIN** appears.
+2. On the PC, open *Steam → Settings → Remote Play → **Pair Steam Link*** and type the PIN.
+3. The handheld shows *"Pareado!"* ("Paired!") and stores its key in `device.json` next to the app.
 
-> `device.json` é a chave do seu aparelho. Não compartilhe esse arquivo; apague-o para parear de novo.
+> [!CAUTION]
+> `device.json` is your device's key. Never share it. Delete it to pair again from scratch.
 
-### 3. Jogar
+### 3. Play
 
-Depois do pareamento o app já procura o PC, conecta e abre o Big Picture. Nas próximas vezes ele vai
-direto para o streaming.
+The app finds your PC, connects and opens Big Picture. Later launches go straight to streaming.
 
-## Controles
+## Controls
 
-| Ação | Botão |
+| Action | Button |
 |---|---|
-| Controle no jogo | todos os botões, como um controle Xbox 360 |
-| Menu do Steam | MENU |
-| Sair durante o streaming | segurar **SELECT + START** por ~1 s |
-| Sair enquanto pareia, procura ou conecta ao PC | **B** (ou SELECT) |
-| Telas de erro | **A** tenta de novo, **Y** pareia de novo, **B** sai |
+| In-game input | Every button, as an Xbox 360 controller |
+| Steam menu | **MENU** |
+| Quit while streaming | Hold **SELECT + START** for ~1 s |
+| Quit while pairing, searching or connecting | **B** (or **SELECT**) |
+| Error screens | **A** retry · **Y** pair again · **B** quit |
 
-Se o muOS não fornecer o mapeamento do controle, o app aplica sozinho o layout padrão "muOS-Keys".
+The layout follows muOS's own controller settings ("retro"/"modern"). If muOS doesn't provide a mapping,
+the app falls back to the standard "muOS-Keys" layout.
 
-O mapeamento dos botões vem do próprio muOS (configuração de layout "retro"/"modern").
+> [!NOTE]
+> On-screen text is currently in Brazilian Portuguese. An English UI is on the roadmap.
 
-## Configuração
+## Supported devices
 
-Campos opcionais em `device.json`, ao lado dos gerados pelo pareamento:
+| Device | Status |
+|---|---|
+| Anbernic RG40XXH | **Tested** on hardware |
+| RG35XX Plus / H / SP / 2024, RG40XX V, RG CubeXX, RG34XX, RG28XX (H700, muOS) | Expected to work, untested |
+| Other ARM64 muOS devices (TrimUI, Rockchip) | May work; video performance not evaluated |
 
-| Campo | Padrão | Uso |
+Video is decoded on the CPU with FFmpeg. 640×480 at 60 fps fits comfortably on the H700; weaker chips may
+stutter. Tested another device? Open an issue with your `steamlink.log` and it goes in the table.
+
+<details>
+<summary><b>Configuration</b></summary>
+
+<br>
+
+`device.json` accepts optional fields next to the ones written by pairing:
+
+| Field | Default | Description |
 |---|---|---|
-| `host` | (descoberta automática) | IP fixo do PC, ex.: `"192.168.0.10"` |
-| `width`, `height` | `640`, `480` | resolução pedida ao PC |
-| `fps` | `60` | quadros por segundo pedidos |
-| `bitrate_kbps` | `10000` | taxa de vídeo pedida |
-
-Exemplo:
+| `host` | auto-discovery | Fixed PC IP address, e.g. `"192.168.0.10"` |
+| `width`, `height` | `640`, `480` | Resolution requested from the PC |
+| `fps` | `60` | Frame rate requested from the PC |
+| `bitrate_kbps` | `10000` | Video bitrate requested from the PC |
 
 ```json
 {
@@ -104,87 +186,156 @@ Exemplo:
 }
 ```
 
-## Solução de problemas
+</details>
 
-Os logs ficam em `MUOS/application/Steam Link/steamlink.log` e `steamlink.stderr.log`.
+<details>
+<summary><b>Troubleshooting</b></summary>
 
-| Sintoma | Causa provável |
+<br>
+
+Logs live in `MUOS/application/Steam Link/steamlink.log` and `steamlink.stderr.log`.
+
+| On-screen message / symptom | Likely cause and fix |
 |---|---|
-| "Sem internet?" ou "Nenhum servidor da Steam respondeu" ao parear | o portátil precisa de internet para gerar o PIN |
-| "Certificado ... rejeitado" ao parear | falta o `cacert.pem` na pasta do app; extraia o zip de novo |
-| "Tempo esgotado" ao parear | o PIN não foi digitado no PC em 10 minutos; tente de novo |
-| "Nenhum PC encontrado" | Steam fechado, PC em outra rede ou firewall bloqueando o Steam; tente fixar `host` |
-| "Dispositivo não autorizado" | o pareamento foi removido no Steam; aperte **Y** para parear de novo |
-| Vídeo preto com aviso amarelo | o PC está na tela de bloqueio/UAC do Windows; desbloqueie |
-| Imagem travando | Wi-Fi fraco; reduza `bitrate_kbps` ou aproxime do roteador |
-| App fecha logo ao abrir | mande o `steamlink.stderr.log` numa issue |
+| *"Sem acesso a internet"* or *"Nenhum servidor da Steam respondeu"* while pairing | The handheld needs internet to get a PIN. Check Wi-Fi. |
+| *"Certificado de … rejeitado"* while pairing | `cacert.pem` is missing from the app folder. Extract the zip again. |
+| *"Tempo esgotado"* while pairing | The PIN wasn't entered on the PC within 10 minutes. Try again. |
+| *"Nenhum PC encontrado"* | Steam is closed, the PC is on another network, or a firewall blocks Steam. Try setting `host`. |
+| *"PC recusou: dispositivo nao autorizado"* | The pairing was removed in Steam. Press **Y** to pair again. |
+| Black video with a yellow warning | The PC is on the Windows lock screen or a UAC prompt. Unlock it. |
+| Choppy video | Weak Wi-Fi. Lower `bitrate_kbps` or move closer to the router. |
+| App closes right after launch | Open an issue and attach `steamlink.stderr.log`. |
 
-## Compilar
+</details>
 
-O build roda em Docker (Debian bullseye, glibc 2.31) com cross-compiler ARM64, FFmpeg estático
-mínimo (só H.264 e Opus) e libcrypto estática. A SDL2 é ligada dinamicamente à do aparelho.
+<details>
+<summary><b>Building from source</b></summary>
+
+<br>
+
+The build runs in Docker (Debian bullseye, glibc 2.31) with an ARM64 cross-compiler, a minimal static
+FFmpeg (H.264 and Opus only) and static OpenSSL. SDL2 is linked dynamically against the device's copy.
 
 ```sh
-docker build -t steamlink-build client/docker          # uma vez (compila o FFmpeg)
-make -C client docker                                  # client/build/aarch64/steamlink
-make -C client package                                 # client/dist/ + SteamLink-muOS.zip
-make -C client package CREDENTIALS=state/device.json   # idem, já com a sua chave (uso pessoal)
+docker build -t steamlink-build client/docker          # once (builds FFmpeg)
+make -C client docker                                  # -> client/build/aarch64/steamlink
+make -C client package                                 # -> client/dist/ + SteamLink-muOS.zip
+make -C client package CREDENTIALS=state/device.json   # same, bundling your key (personal use only)
 ```
 
-Versão x86_64 para testar no computador, sem tela (decodifica e mostra estatísticas):
+An x86_64 build runs headless on a desktop, decoding the stream and printing statistics:
 
 ```sh
 make -C client docker ARCH=x86_64
-docker run --rm --network host -v "$PWD/client":/work -v "$PWD/state/device.json":/cfg/device.json:ro \
-  steamlink-build ./build/x86_64/steamlink --headless --host <ip-do-pc> --config /cfg/device.json --seconds 20
+docker run --rm --network host \
+  -v "$PWD/client":/work -v "$PWD/state/device.json":/cfg/device.json:ro \
+  steamlink-build ./build/x86_64/steamlink --headless --host <pc-ip> --config /cfg/device.json --seconds 20
 ```
 
-Opções do binário: `--host IP`, `--config arquivo`, `--log arquivo`, `--headless`, `--seconds N`,
-`--dump quadro.pgm`, `--h264 fluxo.h264`.
+| Option | Description |
+|---|---|
+| `--host IP` | Connect to this PC instead of discovering one |
+| `--config FILE` | Path to `device.json` |
+| `--log FILE` | Log file path |
+| `--headless` | No window; decode only and print stats |
+| `--seconds N` | Stop after N seconds |
+| `--dump FILE.pgm` | Save a decoded frame |
+| `--h264 FILE.h264` | Save the raw video stream |
 
-## Como funciona
+</details>
 
-1. **Descoberta e pedido de streaming** em UDP 27036 (`CMsgRemoteClientBroadcast*`), com prova de
-   posse da chave do dispositivo; o PC devolve a porta e uma chave de sessão cifrada.
-2. **Sessão UDP** com cabeçalho de 13 bytes + CRC32C, canais confiáveis e não confiáveis.
-3. **Ping de MTU** (pacotes tipo 0) antes do handshake, autenticação por HMAC-SHA256 e mensagens de
-   controle cifradas com AES-CBC.
-4. **Negociação** de codecs, **mídia** nos canais de dados e **controle** pelo HID remoto do Steam,
-   como um gamepad SDL virtual.
+<details>
+<summary><b>How it works</b></summary>
 
-Os detalhes do protocolo, obtidos por engenharia reversa do Steam Link oficial para Raspberry Pi,
-estão em [`docs/PROTOCOLO.md`](docs/PROTOCOLO.md).
-
-## Estrutura
+<br>
 
 ```
-client/src/       cliente C: sessão, descoberta, cripto, protobuf mínimo, FFmpeg, SDL
-client/muos/      lançador e ícone do app muOS
-client/docker/    ambiente de build
-tools/proto/      protótipos em Python (pareamento, streaming)
-tools/            descoberta e utilitários de engenharia reversa
-re/protos, re/pb  definições protobuf do Steam usadas pelas ferramentas
-docs/             documentação do protocolo
+ handheld                               PC (Steam)                    Steam CM servers
+    |                                       |                                |
+    |---- pairing over WebSocket (first launch only) ----------------------->|
+    |<--- PIN ---------------------------------------------------------------|
+    |                                       |<---- PIN typed, key relayed ---|
+    |---- discovery / stream request ------>|  UDP 27036
+    |<--- port + encrypted session key -----|
+    |==== UDP session: MTU ping, handshake, AES-CBC control ===============|
+    |<=== H.264 video + Opus audio =========|
+    |==== remote HID (Xbox 360 pad) =======>|
 ```
 
-## Pendências
+1. **Pairing** goes through Steam's CM servers over WebSocket. They issue the PIN and relay an
+   X25519 key exchange to the PC, so nothing has to be copied from the PC.
+2. **Discovery and stream request** on UDP 27036 (`CMsgRemoteClientBroadcast*`), proving possession of
+   the device key. The PC answers with a port and an encrypted session key.
+3. **UDP session** with a 13-byte header + CRC32C, plus reliable and unreliable channels.
+4. **MTU ping** (type-0 packets) before the handshake, HMAC-SHA256 authentication, and AES-CBC-encrypted
+   control messages.
+5. **Negotiation** of codecs, **media** on the data channels, and **input** through Steam's remote HID as
+   a virtual SDL gamepad.
 
-- Decodificação de vídeo por hardware (VPU do H700).
-- Pedir automaticamente a resolução da tela do aparelho.
-- Validação nos aparelhos listados acima.
+Full protocol notes, reverse engineered from the official Steam Link for Raspberry Pi, are in
+[`docs/PROTOCOLO.md`](docs/PROTOCOLO.md) (Portuguese).
 
-## Créditos
+</details>
 
-- [ihslib](https://github.com/mariotaku/ihslib), de Mariotaku: referência para o ping de MTU, o
-  formato dos quadros de vídeo e o HID remoto.
-- [Thalium](https://blog.thalium.re/posts/achieving-remote-code-execution-in-steam-remote-play/) e
-  o artigo do SSTIC 2023 sobre o protocolo Remote Play.
-- [SteamDatabase/Protobufs](https://github.com/SteamDatabase/Protobufs) e
+<details>
+<summary><b>Project layout</b></summary>
+
+<br>
+
+```
+client/src/       C client: session, discovery, pairing, TLS/WebSocket, crypto, protobuf, FFmpeg, SDL
+client/muos/      muOS launcher and icon
+client/docker/    build environment
+tools/proto/      Python prototypes (pairing, streaming)
+tools/            discovery and reverse-engineering helpers
+re/protos, re/pb  Steam protobuf definitions used by the tools
+docs/             protocol documentation
+```
+
+</details>
+
+## Roadmap
+
+- [x] H.264 + Opus streaming at 60 fps
+- [x] Remote HID controller (Xbox 360)
+- [x] On-device PIN pairing
+- [x] Quit from every screen
+- [ ] Hardware video decoding (H700 VPU)
+- [ ] Request the handheld's native resolution automatically
+- [ ] English UI
+- [ ] Validation on more muOS devices
+
+## Contributing
+
+Bug reports, device test results and pull requests are welcome. When reporting a problem, please attach
+`steamlink.log` and `steamlink.stderr.log` from the app folder.
+
+> [!IMPORTANT]
+> Logs don't include your key, but **never attach `device.json`** to an issue.
+
+## Credits
+
+- [ihslib](https://github.com/mariotaku/ihslib) by Mariotaku: reference for the MTU ping, video frame
+  format and remote HID.
+- [Thalium](https://blog.thalium.re/posts/achieving-remote-code-execution-in-steam-remote-play/) and the
+  SSTIC 2023 paper on the Remote Play protocol.
+- [SteamDatabase/Protobufs](https://github.com/SteamDatabase/Protobufs) and
   [GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets).
-- Equipe do [muOS](https://muos.dev) pelo sistema e pelo modelo de aplicativos.
+- The [muOS](https://muos.dev) team for the OS and its application model.
 
-## Aviso legal
+## Star history
 
-Projeto independente, sem relação com a Valve. Steam e Steam Link são marcas da Valve Corporation.
-A engenharia reversa foi feita para interoperabilidade e uso pessoal; este repositório não contém
-binários nem código proprietário da Valve.
+<a href="https://star-history.com/#JoaoGabrielSantosFranco/steamlink-muos&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=JoaoGabrielSantosFranco/steamlink-muos&type=Date&theme=dark">
+    <img alt="Star history chart" src="https://api.star-history.com/svg?repos=JoaoGabrielSantosFranco/steamlink-muos&type=Date">
+  </picture>
+</a>
+
+## License and disclaimer
+
+Released under the [MIT License](LICENSE).
+
+This is an independent project, not affiliated with or endorsed by Valve. Steam and Steam Link are
+trademarks of Valve Corporation. The reverse engineering was done for interoperability and personal use;
+this repository contains no Valve binaries or proprietary code.
